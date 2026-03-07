@@ -98,6 +98,24 @@ icb > out.txt     # select and save to file
 | `Ctrl+C` / `Esc` | Cancel |
 | `Ctrl+X I` | Insert at cursor (requires shell integration) |
 
+### tmux Integration
+
+You can open icb from any pane with `Alt+i` and paste the selected entry back to the original pane automatically.
+
+Add the following to your `~/.tmux.conf`:
+
+```tmux
+bind -n M-i run-shell 'PANE=#{pane_id}; NW=$(tmux new-window -c "#{pane_current_path}" -P -F "##{pane_id}"); tmux send-keys -t "$NW" "icb | tmux loadb - && tmux paste-buffer -t $PANE; exit" Enter'
+```
+
+How it works:
+
+1. Press `Alt+i` in any pane
+2. A new window opens with the icb TUI
+3. Select an entry and press `Enter`
+4. The selected text is pasted into the original pane
+5. The window closes automatically
+
 ### How it works
 
 `icb` detects whether stdin is a pipe or a TTY at runtime.
@@ -209,6 +227,24 @@ icb > out.txt     # 選択してファイルに保存
 | `Enter` | 選択 → 標準出力 |
 | `Ctrl+C` / `Esc` | キャンセル |
 | `Ctrl+X I` | カーソル位置に挿入（シェルインテグレーション必要） |
+
+### tmuxインテグレーション
+
+`Alt+i` を押すだけで任意のペインからicbを開き、選択した内容を元のペインに自動で貼り付けられる。
+
+`~/.tmux.conf` に以下を追加する：
+
+```tmux
+bind -n M-i run-shell 'PANE=#{pane_id}; NW=$(tmux new-window -c "#{pane_current_path}" -P -F "##{pane_id}"); tmux send-keys -t "$NW" "icb | tmux loadb - && tmux paste-buffer -t $PANE; exit" Enter'
+```
+
+動作の流れ：
+
+1. 任意のペインで `Alt+i` を押す
+2. 新しいウィンドウが開いてicbのTUIが起動する
+3. エントリを選択して `Enter` を押す
+4. 選択したテキストが元のペインに貼り付けられる
+5. ウィンドウが自動で閉じる
 
 ### 仕組み
 
