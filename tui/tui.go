@@ -33,9 +33,10 @@ type model struct {
 	selected     string
 	historyStore *store.Store
 	snippetStore *store.Store
-	statusMsg    string
-	width        int
-	height       int
+	statusMsg   string
+	width       int
+	height      int
+	showPreview bool
 }
 
 func newModel(history, snippets []store.Entry, histStore, snippetStore *store.Store) model {
@@ -105,6 +106,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = "deleted"
 				}
 			}
+		case "p":
+			m.showPreview = !m.showPreview
 		case "s":
 			if len(m.filtered) > 0 {
 				item := m.filtered[m.cursor]
@@ -142,8 +145,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	content := m.currentContent()
-	if m.width >= 80 && strings.Contains(content, "\n") {
+	if m.showPreview && m.width >= 80 {
 		return m.splitView()
 	}
 	return m.singleView()
@@ -194,7 +196,7 @@ func (m model) singleView() string {
 	if m.statusMsg != "" {
 		fmt.Fprintf(&b, "%s\n", m.statusMsg)
 	} else {
-		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  Enter:select  Ctrl+C:cancel\n",
+		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  p:preview  Enter:select  Ctrl+C:cancel\n",
 			len(m.filtered), len(m.all))
 	}
 
@@ -227,7 +229,7 @@ func (m model) splitView() string {
 	if m.statusMsg != "" {
 		fmt.Fprintf(&b, "%s\n", m.statusMsg)
 	} else {
-		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  Enter:select  Ctrl+C:cancel\n",
+		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  p:preview  Enter:select  Ctrl+C:cancel\n",
 			len(m.filtered), len(m.all))
 	}
 
