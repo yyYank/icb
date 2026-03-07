@@ -105,9 +105,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if item.Source == SourceSnippet {
 					m.statusMsg = "already a snippet"
 				} else {
-					if err := m.snippetStore.Add(item.Entry.Content); err != nil {
+					newEntry, err := m.snippetStore.Add(item.Entry.Content)
+					if err != nil {
 						m.statusMsg = "error: " + err.Error()
 					} else {
+						// 先頭にスニペット行を追加して即反映
+						newItem := Item{Entry: newEntry, Source: SourceSnippet}
+						m.all = append([]Item{newItem}, m.all...)
+						m.filtered = filterItems(m.all, m.query)
 						m.statusMsg = "saved as snippet"
 					}
 				}

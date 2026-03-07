@@ -36,7 +36,7 @@ func TestLoad_NoFile(t *testing.T) {
 func TestAdd_AndLoad(t *testing.T) {
 	s := newTempStore(t)
 
-	if err := s.Add("hello world"); err != nil {
+	if _, err := s.Add("hello world"); err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
 
@@ -58,13 +58,32 @@ func TestAdd_AndLoad(t *testing.T) {
 	}
 }
 
+// Addが追加したエントリを返す
+func TestAdd_ReturnsEntry(t *testing.T) {
+	s := newTempStore(t)
+
+	entry, err := s.Add("hello world")
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	if entry.Content != "hello world" {
+		t.Errorf("want 'hello world', got %q", entry.Content)
+	}
+	if entry.ID == "" {
+		t.Error("want non-empty ID")
+	}
+	if entry.CreatedAt.IsZero() {
+		t.Error("want non-zero CreatedAt")
+	}
+}
+
 // 複数エントリを順番通りに保持する
 func TestAdd_MultipleEntries(t *testing.T) {
 	s := newTempStore(t)
 
 	texts := []string{"first", "second", "third"}
 	for _, text := range texts {
-		if err := s.Add(text); err != nil {
+		if _, err := s.Add(text); err != nil {
 			t.Fatalf("Add(%q) failed: %v", text, err)
 		}
 	}
@@ -88,7 +107,7 @@ func TestAdd_HistoryPrunesAt100(t *testing.T) {
 	s := newTempStore(t)
 
 	for i := 0; i < 101; i++ {
-		if err := s.Add("entry"); err != nil {
+		if _, err := s.Add("entry"); err != nil {
 			t.Fatalf("Add failed at %d: %v", i, err)
 		}
 	}
@@ -107,7 +126,7 @@ func TestAdd_MultilineContent(t *testing.T) {
 	s := newTempStore(t)
 
 	content := "line1\nline2\nline3"
-	if err := s.Add(content); err != nil {
+	if _, err := s.Add(content); err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
 
@@ -150,10 +169,10 @@ not-json-at-all
 func TestDelete_RemovesEntry(t *testing.T) {
 	s := newTempStore(t)
 
-	if err := s.Add("keep"); err != nil {
+	if _, err := s.Add("keep"); err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
-	if err := s.Add("delete me"); err != nil {
+	if _, err := s.Add("delete me"); err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
 
@@ -179,7 +198,7 @@ func TestDelete_RemovesEntry(t *testing.T) {
 // 存在しないIDを削除してもエラーにならない
 func TestDelete_NonExistentID(t *testing.T) {
 	s := newTempStore(t)
-	if err := s.Add("entry"); err != nil {
+	if _, err := s.Add("entry"); err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
 
@@ -198,13 +217,13 @@ func TestSnippetAdd_ErrorWhenFull(t *testing.T) {
 	s := newTempSnippetStore(t)
 
 	for i := 0; i < 100; i++ {
-		if err := s.Add("snippet"); err != nil {
+		if _, err := s.Add("snippet"); err != nil {
 			t.Fatalf("Add failed at %d: %v", i, err)
 		}
 	}
 
 	// 101件目はエラーになるべき
-	err := s.Add("one more")
+	_, err := s.Add("one more")
 	if err == nil {
 		t.Error("want error when snippet store is full, got nil")
 	}
@@ -214,7 +233,7 @@ func TestSnippetAdd_ErrorWhenFull(t *testing.T) {
 func TestSnippetAdd_WithinLimit(t *testing.T) {
 	s := newTempSnippetStore(t)
 
-	if err := s.Add("my snippet"); err != nil {
+	if _, err := s.Add("my snippet"); err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
 

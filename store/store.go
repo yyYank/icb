@@ -92,12 +92,12 @@ func (s *Store) Load() ([]Entry, error) {
 	return entries, scanner.Err()
 }
 
-// Add はコンテンツを追記する
+// Add はコンテンツを追記し、追加したエントリを返す
 // autoPrune=true なら上限超えで古いものを削除、false なら上限超えでエラーを返す
-func (s *Store) Add(content string) error {
+func (s *Store) Add(content string) (Entry, error) {
 	entries, err := s.Load()
 	if err != nil {
-		return err
+		return Entry{}, err
 	}
 
 	entry := Entry{
@@ -111,11 +111,11 @@ func (s *Store) Add(content string) error {
 		if s.autoPrune {
 			entries = entries[len(entries)-s.maxSize:]
 		} else {
-			return fmt.Errorf("snippet store is full (%d entries), delete some before adding", s.maxSize)
+			return Entry{}, fmt.Errorf("snippet store is full (%d entries), delete some before adding", s.maxSize)
 		}
 	}
 
-	return s.save(entries)
+	return entry, s.save(entries)
 }
 
 // Delete はIDに一致するエントリを削除する。存在しない場合はno-op。

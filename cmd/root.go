@@ -52,7 +52,8 @@ func run(cmd *cobra.Command, args []string) error {
 		if text == "" {
 			return nil
 		}
-		return histStore.Add(text)
+		_, err = histStore.Add(text)
+		return err
 	}
 
 	// TTY → TUI起動
