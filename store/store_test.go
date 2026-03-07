@@ -14,6 +14,12 @@ func newTempStore(t *testing.T) *store.Store {
 	return store.NewWithPath(filepath.Join(dir, "test_history"))
 }
 
+func newTempSnippetStore(t *testing.T) *store.Store {
+	t.Helper()
+	dir := t.TempDir()
+	return store.NewSnippetWithPath(filepath.Join(dir, "test_snippets"))
+}
+
 // 空の履歴ファイルが存在しないとき、Loadはnilを返す
 func TestLoad_NoFile(t *testing.T) {
 	s := newTempStore(t)
@@ -77,11 +83,11 @@ func TestAdd_MultipleEntries(t *testing.T) {
 	}
 }
 
-// 上限(1000件)を超えたとき古いエントリが削除される
-func TestAdd_PrunesOldEntries(t *testing.T) {
+// 履歴の上限(100件)を超えたとき古いエントリが削除される
+func TestAdd_HistoryPrunesAt100(t *testing.T) {
 	s := newTempStore(t)
 
-	for i := 0; i < 1001; i++ {
+	for i := 0; i < 101; i++ {
 		if err := s.Add("entry"); err != nil {
 			t.Fatalf("Add failed at %d: %v", i, err)
 		}
@@ -91,8 +97,8 @@ func TestAdd_PrunesOldEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
-	if len(entries) != 1000 {
-		t.Errorf("want 1000 entries, got %d", len(entries))
+	if len(entries) != 100 {
+		t.Errorf("want 100 entries, got %d", len(entries))
 	}
 }
 
@@ -122,7 +128,6 @@ func TestLoad_SkipsInvalidLines(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "history")
 
-	// 正常なJSON行と不正な行を混在させて書き込む
 	data := `{"id":"1","content":"valid","created_at":"2026-01-01T00:00:00Z"}
 not-json-at-all
 {"id":"2","content":"also valid","created_at":"2026-01-01T00:00:00Z"}
@@ -138,5 +143,86 @@ not-json-at-all
 	}
 	if len(entries) != 2 {
 		t.Fatalf("want 2 entries, got %d", len(entries))
+	}
+}
+
+// DeleteはIDに一致するエントリを削除する
+func TestDelete_RemovesEntry(t *testing.T) {
+	s := newTempStore(t)
+
+	if err := s.Add("keep"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	if err := s.Add("delete me"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	entries, _ := s.Load()
+	deleteID := entries[1].ID
+
+	if err := s.Delete(deleteID); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	after, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load after delete failed: %v", err)
+	}
+	if len(after) != 1 {
+		t.Fatalf("want 1 entry after delete, got %d", len(after))
+	}
+	if after[0].Content != "keep" {
+		t.Errorf("want 'keep', got %q", after[0].Content)
+	}
+}
+
+// 存在しないIDを削除してもエラーにならない
+func TestDelete_NonExistentID(t *testing.T) {
+	s := newTempStore(t)
+	if err := s.Add("entry"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	if err := s.Delete("no-such-id"); err != nil {
+		t.Errorf("want no error for non-existent ID, got %v", err)
+	}
+
+	entries, _ := s.Load()
+	if len(entries) != 1 {
+		t.Errorf("want 1 entry unchanged, got %d", len(entries))
+	}
+}
+
+// スニペットストアは上限(100件)に達すると自動削除せずエラーを返す
+func TestSnippetAdd_ErrorWhenFull(t *testing.T) {
+	s := newTempSnippetStore(t)
+
+	for i := 0; i < 100; i++ {
+		if err := s.Add("snippet"); err != nil {
+			t.Fatalf("Add failed at %d: %v", i, err)
+		}
+	}
+
+	// 101件目はエラーになるべき
+	err := s.Add("one more")
+	if err == nil {
+		t.Error("want error when snippet store is full, got nil")
+	}
+}
+
+// スニペットストアは上限未満なら追加できる
+func TestSnippetAdd_WithinLimit(t *testing.T) {
+	s := newTempSnippetStore(t)
+
+	if err := s.Add("my snippet"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	entries, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(entries))
 	}
 }

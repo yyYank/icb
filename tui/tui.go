@@ -11,23 +11,46 @@ import (
 
 const maxVisible = 10
 
-type model struct {
-	all      []store.Entry // 全エントリ（新しい順）
-	filtered []store.Entry // 検索後エントリ
-	cursor   int
-	query    string
-	selected string
+// Source はエントリの種別を表す
+type Source int
+
+const (
+	SourceHistory Source = iota
+	SourceSnippet
+)
+
+// Item はTUI表示用エントリ（種別付き）
+type Item struct {
+	Entry  store.Entry
+	Source Source
 }
 
-func newModel(entries []store.Entry) model {
-	// 新しい順に並べる
-	reversed := make([]store.Entry, len(entries))
-	for i, e := range entries {
-		reversed[len(entries)-1-i] = e
+type model struct {
+	all          []Item
+	filtered     []Item
+	cursor       int
+	query        string
+	selected     string
+	historyStore *store.Store
+	snippetStore *store.Store
+	statusMsg    string
+}
+
+func newModel(history, snippets []store.Entry, histStore, snippetStore *store.Store) model {
+	var all []Item
+	// スニペットを先頭に（新しい順）
+	for i := len(snippets) - 1; i >= 0; i-- {
+		all = append(all, Item{Entry: snippets[i], Source: SourceSnippet})
+	}
+	// 履歴を後に（新しい順）
+	for i := len(history) - 1; i >= 0; i-- {
+		all = append(all, Item{Entry: history[i], Source: SourceHistory})
 	}
 	return model{
-		all:      reversed,
-		filtered: reversed,
+		all:          all,
+		filtered:     all,
+		historyStore: histStore,
+		snippetStore: snippetStore,
 	}
 }
 
@@ -38,12 +61,14 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		m.statusMsg = "" // キー操作でステータスをクリア
+
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
 		case "enter":
 			if len(m.filtered) > 0 {
-				m.selected = m.filtered[m.cursor].Content
+				m.selected = m.filtered[m.cursor].Entry.Content
 			}
 			return m, tea.Quit
 		case "up":
@@ -54,19 +79,51 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.filtered)-1 {
 				m.cursor++
 			}
+		case "d":
+			if len(m.filtered) > 0 {
+				item := m.filtered[m.cursor]
+				var err error
+				if item.Source == SourceSnippet {
+					err = m.snippetStore.Delete(item.Entry.ID)
+				} else {
+					err = m.historyStore.Delete(item.Entry.ID)
+				}
+				if err != nil {
+					m.statusMsg = "error: " + err.Error()
+				} else {
+					m.all = removeItem(m.all, item.Entry.ID)
+					m.filtered = filterItems(m.all, m.query)
+					if m.cursor >= len(m.filtered) && m.cursor > 0 {
+						m.cursor--
+					}
+					m.statusMsg = "deleted"
+				}
+			}
+		case "s":
+			if len(m.filtered) > 0 {
+				item := m.filtered[m.cursor]
+				if item.Source == SourceSnippet {
+					m.statusMsg = "already a snippet"
+				} else {
+					if err := m.snippetStore.Add(item.Entry.Content); err != nil {
+						m.statusMsg = "error: " + err.Error()
+					} else {
+						m.statusMsg = "saved as snippet"
+					}
+				}
+			}
 		case "backspace":
 			if len(m.query) > 0 {
-				// rune単位で削除
 				runes := []rune(m.query)
 				m.query = string(runes[:len(runes)-1])
 				m.cursor = 0
-				m.filtered = filterEntries(m.all, m.query)
+				m.filtered = filterItems(m.all, m.query)
 			}
 		default:
 			if len(msg.Runes) > 0 {
 				m.query += string(msg.Runes)
 				m.cursor = 0
-				m.filtered = filterEntries(m.all, m.query)
+				m.filtered = filterItems(m.all, m.query)
 			}
 		}
 	}
@@ -89,27 +146,38 @@ func (m model) View() string {
 	}
 
 	for i := start; i < end; i++ {
-		line := m.filtered[i].Content
-		// 複数行コンテンツは最初の行だけ表示
+		item := m.filtered[i]
+		line := item.Entry.Content
 		if idx := strings.Index(line, "\n"); idx >= 0 {
 			line = line[:idx] + " ..."
 		}
+
+		cursor := " "
 		if i == m.cursor {
-			fmt.Fprintf(&b, "▶ %s\n", line)
-		} else {
-			fmt.Fprintf(&b, "  %s\n", line)
+			cursor = "▶"
 		}
+		star := " "
+		if item.Source == SourceSnippet {
+			star = "★"
+		}
+		fmt.Fprintf(&b, "%s%s %s\n", cursor, star, line)
 	}
 
 	b.WriteString(strings.Repeat("─", 40) + "\n")
-	fmt.Fprintf(&b, "%d/%d  ↑↓で移動  Enterで選択  Ctrl+Cでキャンセル\n", len(m.filtered), len(m.all))
+
+	if m.statusMsg != "" {
+		fmt.Fprintf(&b, "%s\n", m.statusMsg)
+	} else {
+		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  Enter:select  Ctrl+C:cancel\n",
+			len(m.filtered), len(m.all))
+	}
 
 	return b.String()
 }
 
 // Run はTUIを起動し、選択されたコンテンツを返す
-func Run(entries []store.Entry) (string, error) {
-	if len(entries) == 0 {
+func Run(history, snippets []store.Entry, histStore, snippetStore *store.Store) (string, error) {
+	if len(history) == 0 && len(snippets) == 0 {
 		return "", nil
 	}
 
@@ -121,7 +189,7 @@ func Run(entries []store.Entry) (string, error) {
 	}
 	defer tty.Close()
 
-	m := newModel(entries)
+	m := newModel(history, snippets, histStore, snippetStore)
 	p := tea.NewProgram(m, tea.WithInput(tty), tea.WithOutput(tty))
 
 	result, err := p.Run()
@@ -132,15 +200,25 @@ func Run(entries []store.Entry) (string, error) {
 	return result.(model).selected, nil
 }
 
-func filterEntries(entries []store.Entry, query string) []store.Entry {
+func filterItems(items []Item, query string) []Item {
 	if query == "" {
-		return entries
+		return items
 	}
 	q := strings.ToLower(query)
-	var result []store.Entry
-	for _, e := range entries {
-		if strings.Contains(strings.ToLower(e.Content), q) {
-			result = append(result, e)
+	var result []Item
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(item.Entry.Content), q) {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func removeItem(items []Item, id string) []Item {
+	result := make([]Item, 0, len(items))
+	for _, item := range items {
+		if item.Entry.ID != id {
+			result = append(result, item)
 		}
 	}
 	return result

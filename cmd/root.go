@@ -37,7 +37,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	s, err := store.New()
+	histStore, err := store.NewHistory()
 	if err != nil {
 		return err
 	}
@@ -52,16 +52,26 @@ func run(cmd *cobra.Command, args []string) error {
 		if text == "" {
 			return nil
 		}
-		return s.Add(text)
+		return histStore.Add(text)
 	}
 
 	// TTY → TUI起動
-	entries, err := s.Load()
+	snippetStore, err := store.NewSnippets()
 	if err != nil {
 		return err
 	}
 
-	selected, err := tui.Run(entries)
+	history, err := histStore.Load()
+	if err != nil {
+		return err
+	}
+
+	snippets, err := snippetStore.Load()
+	if err != nil {
+		return err
+	}
+
+	selected, err := tui.Run(history, snippets, histStore, snippetStore)
 	if err != nil {
 		return err
 	}
