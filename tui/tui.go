@@ -34,6 +34,9 @@ type model struct {
 	historyStore *store.Store
 	snippetStore *store.Store
 	statusMsg    string
+	width        int
+	height       int
+	previewMode  bool
 }
 
 func newModel(history, snippets []store.Entry, histStore, snippetStore *store.Store) model {
@@ -60,7 +63,20 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
+		// プレビューモード中: Ctrl+C で quit、それ以外で一覧に戻る
+		if m.previewMode {
+			if msg.Type == tea.KeyCtrlC {
+				return m, tea.Quit
+			}
+			m.previewMode = false
+			return m, nil
+		}
+
 		m.statusMsg = "" // キー操作でステータスをクリア
 
 		switch msg.String() {
@@ -99,6 +115,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = "deleted"
 				}
 			}
+		case "p":
+			if len(m.filtered) > 0 {
+				m.previewMode = true
+			}
 		case "s":
 			if len(m.filtered) > 0 {
 				item := m.filtered[m.cursor]
@@ -136,6 +156,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	if m.previewMode {
+		return m.previewView()
+	}
+	return m.listView()
+}
+
+func (m model) currentContent() string {
+	if len(m.filtered) == 0 {
+		return ""
+	}
+	return m.filtered[m.cursor].Entry.Content
+}
+
+func (m model) previewView() string {
+	var b strings.Builder
+	b.WriteString(strings.Repeat("─", 40) + "\n")
+	b.WriteString(m.currentContent() + "\n")
+	b.WriteString(strings.Repeat("─", 40) + "\n")
+	b.WriteString("any key: back to list  Ctrl+C: cancel\n")
+	return b.String()
+}
+
+func (m model) listView() string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "> %s\n", m.query)
@@ -173,7 +216,7 @@ func (m model) View() string {
 	if m.statusMsg != "" {
 		fmt.Fprintf(&b, "%s\n", m.statusMsg)
 	} else {
-		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  Enter:select  Ctrl+C:cancel\n",
+		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  p:preview  Enter:select  Ctrl+C:cancel\n",
 			len(m.filtered), len(m.all))
 	}
 
