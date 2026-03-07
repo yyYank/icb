@@ -113,8 +113,16 @@ func Run(entries []store.Entry) (string, error) {
 		return "", nil
 	}
 
+	// シェルウィジェットから呼ばれると stdin/stdout がリダイレクトされているため、
+	// /dev/tty を直接開いて入出力を端末に固定する
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to open /dev/tty: %w", err)
+	}
+	defer tty.Close()
+
 	m := newModel(entries)
-	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
+	p := tea.NewProgram(m, tea.WithInput(tty), tea.WithOutput(tty))
 
 	result, err := p.Run()
 	if err != nil {
