@@ -33,10 +33,10 @@ type model struct {
 	selected     string
 	historyStore *store.Store
 	snippetStore *store.Store
-	statusMsg   string
-	width       int
-	height      int
-	showPreview bool
+	statusMsg    string
+	width        int
+	height       int
+	previewMode  bool
 }
 
 func newModel(history, snippets []store.Entry, histStore, snippetStore *store.Store) model {
@@ -68,6 +68,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case tea.KeyMsg:
+		// プレビューモード中: Ctrl+C で quit、それ以外で一覧に戻る
+		if m.previewMode {
+			if msg.Type == tea.KeyCtrlC {
+				return m, tea.Quit
+			}
+			m.previewMode = false
+			return m, nil
+		}
+
 		m.statusMsg = "" // キー操作でステータスをクリア
 
 		switch msg.String() {
@@ -107,7 +116,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "p":
-			m.showPreview = !m.showPreview
+			if len(m.filtered) > 0 {
+				m.previewMode = true
+			}
 		case "s":
 			if len(m.filtered) > 0 {
 				item := m.filtered[m.cursor]
@@ -145,10 +156,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	if m.showPreview && m.width >= 80 {
-		return m.splitView()
+	if m.previewMode {
+		return m.previewView()
 	}
-	return m.singleView()
+	return m.listView()
 }
 
 func (m model) currentContent() string {
@@ -158,7 +169,16 @@ func (m model) currentContent() string {
 	return m.filtered[m.cursor].Entry.Content
 }
 
-func (m model) singleView() string {
+func (m model) previewView() string {
+	var b strings.Builder
+	b.WriteString(strings.Repeat("─", 40) + "\n")
+	b.WriteString(m.currentContent() + "\n")
+	b.WriteString(strings.Repeat("─", 40) + "\n")
+	b.WriteString("any key: back to list  Ctrl+C: cancel\n")
+	return b.String()
+}
+
+func (m model) listView() string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "> %s\n", m.query)
@@ -201,82 +221,6 @@ func (m model) singleView() string {
 	}
 
 	return b.String()
-}
-
-func (m model) splitView() string {
-	leftWidth := m.width / 2
-
-	leftLines := m.buildLeftLines(leftWidth)
-	rightLines := strings.Split(m.currentContent(), "\n")
-
-	var b strings.Builder
-	maxLines := len(leftLines)
-	if len(rightLines) > maxLines {
-		maxLines = len(rightLines)
-	}
-	for i := 0; i < maxLines; i++ {
-		l := ""
-		if i < len(leftLines) {
-			l = leftLines[i]
-		}
-		r := ""
-		if i < len(rightLines) {
-			r = rightLines[i]
-		}
-		fmt.Fprintf(&b, "%s│%s\n", padRight(l, leftWidth), r)
-	}
-
-	if m.statusMsg != "" {
-		fmt.Fprintf(&b, "%s\n", m.statusMsg)
-	} else {
-		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  p:preview  Enter:select  Ctrl+C:cancel\n",
-			len(m.filtered), len(m.all))
-	}
-
-	return b.String()
-}
-
-func (m model) buildLeftLines(width int) []string {
-	var lines []string
-	lines = append(lines, fmt.Sprintf("> %s", m.query))
-	lines = append(lines, strings.Repeat("─", width))
-
-	start := 0
-	if m.cursor >= maxVisible {
-		start = m.cursor - maxVisible + 1
-	}
-	end := start + maxVisible
-	if end > len(m.filtered) {
-		end = len(m.filtered)
-	}
-
-	for i := start; i < end; i++ {
-		item := m.filtered[i]
-		line := item.Entry.Content
-		if idx := strings.Index(line, "\n"); idx >= 0 {
-			line = line[:idx] + " ..."
-		}
-		cursor := " "
-		if i == m.cursor {
-			cursor = "▶"
-		}
-		star := " "
-		if item.Source == SourceSnippet {
-			star = "★"
-		}
-		lines = append(lines, fmt.Sprintf("%s%s %s", cursor, star, line))
-	}
-
-	lines = append(lines, strings.Repeat("─", width))
-	return lines
-}
-
-func padRight(s string, width int) string {
-	runes := []rune(s)
-	if len(runes) >= width {
-		return string(runes[:width])
-	}
-	return s + strings.Repeat(" ", width-len(runes))
 }
 
 // Run はTUIを起動し、選択されたコンテンツを返す

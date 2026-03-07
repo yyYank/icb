@@ -21,76 +21,65 @@ func TestModel_WindowSizeUpdate(t *testing.T) {
 	}
 }
 
-// pキーでshowPreviewがトグルされる
-func TestModel_PKeyTogglesPreview(t *testing.T) {
-	m := newModel(nil, nil, nil, nil)
-	if m.showPreview {
-		t.Fatal("want showPreview=false initially")
+// pキーでpreviewModeがtrueになる
+func TestModel_PKeyEntersPreviewMode(t *testing.T) {
+	entries := []store.Entry{
+		{ID: "1", Content: "line1\nline2\nline3"},
 	}
+	m := newModel(entries, nil, nil, nil)
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	m = result.(model)
-	if !m.showPreview {
-		t.Error("want showPreview=true after first p")
-	}
-
-	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
-	m = result.(model)
-	if m.showPreview {
-		t.Error("want showPreview=false after second p")
+	if !m.previewMode {
+		t.Error("want previewMode=true after p")
 	}
 }
 
-// showPreview=trueかつwidth>=80のとき、スプリットセパレータが表示される
-func TestView_SplitViewWhenPreviewEnabled(t *testing.T) {
-	entries := []store.Entry{
-		{ID: "1", Content: "line1\nline2\nline3"},
-	}
-	m := newModel(entries, nil, nil, nil)
-	m.width = 120
-	m.height = 40
-	m.showPreview = true
-
-	view := m.View()
-	if !strings.Contains(view, "│") {
-		t.Errorf("want │ separator in split view, got:\n%s", view)
-	}
-	if !strings.Contains(view, "line2") {
-		t.Errorf("want preview to contain 'line2', got:\n%s", view)
-	}
-	if !strings.Contains(view, "line3") {
-		t.Errorf("want preview to contain 'line3', got:\n%s", view)
-	}
-}
-
-// showPreview=falseのときはスプリットビューを表示しない
-func TestView_NoSplitViewWhenPreviewDisabled(t *testing.T) {
-	entries := []store.Entry{
-		{ID: "1", Content: "line1\nline2\nline3"},
-	}
-	m := newModel(entries, nil, nil, nil)
-	m.width = 120
-	m.height = 40
-	// showPreview はデフォルト false
-
-	view := m.View()
-	if strings.Contains(view, "│") {
-		t.Errorf("want no │ separator when preview disabled, got:\n%s", view)
-	}
-}
-
-// widthが80未満のときはshowPreview=trueでもスプリットビューを表示しない
-func TestView_NoSplitViewWhenNarrow(t *testing.T) {
+// previewMode中に何かキーを押すとリストに戻る
+func TestModel_AnyKeyExitsPreviewMode(t *testing.T) {
 	entries := []store.Entry{
 		{ID: "1", Content: "line1\nline2"},
 	}
 	m := newModel(entries, nil, nil, nil)
-	m.width = 40
-	m.height = 40
-	m.showPreview = true
+	m.previewMode = true
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m = result.(model)
+	if m.previewMode {
+		t.Error("want previewMode=false after any key in preview mode")
+	}
+}
+
+// previewMode中のViewは選択アイテムのフル内容を含む
+func TestView_PreviewModeShowsFullContent(t *testing.T) {
+	entries := []store.Entry{
+		{ID: "1", Content: "line1\nline2\nline3"},
+	}
+	m := newModel(entries, nil, nil, nil)
+	m.previewMode = true
 
 	view := m.View()
-	if strings.Contains(view, "│") {
-		t.Errorf("want no │ separator when narrow, got:\n%s", view)
+	if !strings.Contains(view, "line1") {
+		t.Errorf("want 'line1' in preview, got:\n%s", view)
+	}
+	if !strings.Contains(view, "line2") {
+		t.Errorf("want 'line2' in preview, got:\n%s", view)
+	}
+	if !strings.Contains(view, "line3") {
+		t.Errorf("want 'line3' in preview, got:\n%s", view)
+	}
+}
+
+// previewMode中はCtrl+Cでquitする
+func TestModel_CtrlCQuitsFromPreviewMode(t *testing.T) {
+	entries := []store.Entry{
+		{ID: "1", Content: "line1\nline2"},
+	}
+	m := newModel(entries, nil, nil, nil)
+	m.previewMode = true
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Error("want tea.Quit on ctrl+c in preview mode")
 	}
 }
