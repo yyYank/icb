@@ -20,13 +20,15 @@ func (m inputModel) Init() tea.Cmd {
 func (m inputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc":
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyEsc:
 			m.canceled = true
 			return m, tea.Quit
-		case "enter":
+		case tea.KeyCtrlS:
 			return m, tea.Quit
-		case "backspace":
+		case tea.KeyEnter:
+			m.value += "\n"
+		case tea.KeyBackspace:
 			if len(m.value) > 0 {
 				runes := []rune(m.value)
 				m.value = string(runes[:len(runes)-1])
@@ -41,7 +43,7 @@ func (m inputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m inputModel) View() string {
-	return fmt.Sprintf("Enter snippet: %s_\n", m.value)
+	return fmt.Sprintf("Enter snippet (Ctrl+S to save, Ctrl+C to cancel):\n%s▌\n", m.value)
 }
 
 // RunInput はテキスト入力TUIを起動し、入力されたテキストを返す
@@ -64,5 +66,5 @@ func RunInput() (string, error) {
 	if final.canceled {
 		return "", nil
 	}
-	return strings.TrimSpace(final.value), nil
+	return strings.TrimRight(final.value, "\n"), nil
 }
