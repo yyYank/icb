@@ -34,6 +34,8 @@ type model struct {
 	historyStore *store.Store
 	snippetStore *store.Store
 	statusMsg    string
+	width        int
+	height       int
 }
 
 func newModel(history, snippets []store.Entry, histStore, snippetStore *store.Store) model {
@@ -60,6 +62,10 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		m.statusMsg = "" // キー操作でステータスをクリア
 
@@ -136,6 +142,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	content := m.currentContent()
+	if m.width >= 80 && strings.Contains(content, "\n") {
+		return m.splitView()
+	}
+	return m.singleView()
+}
+
+func (m model) currentContent() string {
+	if len(m.filtered) == 0 {
+		return ""
+	}
+	return m.filtered[m.cursor].Entry.Content
+}
+
+func (m model) singleView() string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "> %s\n", m.query)
@@ -178,6 +199,82 @@ func (m model) View() string {
 	}
 
 	return b.String()
+}
+
+func (m model) splitView() string {
+	leftWidth := m.width / 2
+
+	leftLines := m.buildLeftLines(leftWidth)
+	rightLines := strings.Split(m.currentContent(), "\n")
+
+	var b strings.Builder
+	maxLines := len(leftLines)
+	if len(rightLines) > maxLines {
+		maxLines = len(rightLines)
+	}
+	for i := 0; i < maxLines; i++ {
+		l := ""
+		if i < len(leftLines) {
+			l = leftLines[i]
+		}
+		r := ""
+		if i < len(rightLines) {
+			r = rightLines[i]
+		}
+		fmt.Fprintf(&b, "%s│%s\n", padRight(l, leftWidth), r)
+	}
+
+	if m.statusMsg != "" {
+		fmt.Fprintf(&b, "%s\n", m.statusMsg)
+	} else {
+		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  Enter:select  Ctrl+C:cancel\n",
+			len(m.filtered), len(m.all))
+	}
+
+	return b.String()
+}
+
+func (m model) buildLeftLines(width int) []string {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("> %s", m.query))
+	lines = append(lines, strings.Repeat("─", width))
+
+	start := 0
+	if m.cursor >= maxVisible {
+		start = m.cursor - maxVisible + 1
+	}
+	end := start + maxVisible
+	if end > len(m.filtered) {
+		end = len(m.filtered)
+	}
+
+	for i := start; i < end; i++ {
+		item := m.filtered[i]
+		line := item.Entry.Content
+		if idx := strings.Index(line, "\n"); idx >= 0 {
+			line = line[:idx] + " ..."
+		}
+		cursor := " "
+		if i == m.cursor {
+			cursor = "▶"
+		}
+		star := " "
+		if item.Source == SourceSnippet {
+			star = "★"
+		}
+		lines = append(lines, fmt.Sprintf("%s%s %s", cursor, star, line))
+	}
+
+	lines = append(lines, strings.Repeat("─", width))
+	return lines
+}
+
+func padRight(s string, width int) string {
+	runes := []rune(s)
+	if len(runes) >= width {
+		return string(runes[:width])
+	}
+	return s + strings.Repeat(" ", width-len(runes))
 }
 
 // Run はTUIを起動し、選択されたコンテンツを返す
