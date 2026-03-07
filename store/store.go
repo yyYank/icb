@@ -10,9 +10,12 @@ import (
 	"time"
 )
 
-const maxEntries = 1000
+const (
+	MaxHistory  = 100
+	MaxSnippets = 100
+)
 
-// Entry は履歴の1件を表す
+// Entry は履歴・スニペット1件を表す
 type Entry struct {
 	ID        string    `json:"id"`
 	Content   string    `json:"content"`
@@ -21,21 +24,45 @@ type Entry struct {
 
 // Store は履歴ファイルの読み書きを担う
 type Store struct {
-	path string
+	path      string
+	maxSize   int
+	autoPrune bool // trueなら上限超えで古いものを自動削除、falseならエラーを返す
 }
 
-// New はデフォルトパス (~/.icb_history) のStoreを返す
-func New() (*Store, error) {
+// NewHistory はデフォルトパス (~/.icb_history) の履歴Storeを返す
+func NewHistory() (*Store, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
-	return &Store{path: filepath.Join(home, ".icb_history")}, nil
+	return &Store{
+		path:      filepath.Join(home, ".icb_history"),
+		maxSize:   MaxHistory,
+		autoPrune: true,
+	}, nil
 }
 
-// NewWithPath は任意のパスのStoreを返す（テスト用）
+// NewSnippets はデフォルトパス (~/.icb_snippets) のスニペットStoreを返す
+func NewSnippets() (*Store, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	return &Store{
+		path:      filepath.Join(home, ".icb_snippets"),
+		maxSize:   MaxSnippets,
+		autoPrune: false,
+	}, nil
+}
+
+// NewWithPath は任意のパスの履歴Storeを返す（テスト用）
 func NewWithPath(path string) *Store {
-	return &Store{path: path}
+	return &Store{path: path, maxSize: MaxHistory, autoPrune: true}
+}
+
+// NewSnippetWithPath は任意のパスのスニペットStoreを返す（テスト用）
+func NewSnippetWithPath(path string) *Store {
+	return &Store{path: path, maxSize: MaxSnippets, autoPrune: false}
 }
 
 // Load は履歴ファイルを読み込んで返す
@@ -65,11 +92,12 @@ func (s *Store) Load() ([]Entry, error) {
 	return entries, scanner.Err()
 }
 
-// Add はコンテンツを履歴に追記する（上限超えたら古いものを削除）
-func (s *Store) Add(content string) error {
+// Add はコンテンツを追記し、追加したエントリを返す
+// autoPrune=true なら上限超えで古いものを削除、false なら上限超えでエラーを返す
+func (s *Store) Add(content string) (Entry, error) {
 	entries, err := s.Load()
 	if err != nil {
-		return err
+		return Entry{}, err
 	}
 
 	entry := Entry{
@@ -79,11 +107,35 @@ func (s *Store) Add(content string) error {
 	}
 	entries = append(entries, entry)
 
-	if len(entries) > maxEntries {
-		entries = entries[len(entries)-maxEntries:]
+	if len(entries) > s.maxSize {
+		if s.autoPrune {
+			entries = entries[len(entries)-s.maxSize:]
+		} else {
+			return Entry{}, fmt.Errorf("snippet store is full (%d entries), delete some before adding", s.maxSize)
+		}
 	}
 
-	return s.save(entries)
+	return entry, s.save(entries)
+}
+
+// Delete はIDに一致するエントリを削除する。存在しない場合はno-op。
+func (s *Store) Delete(id string) error {
+	entries, err := s.Load()
+	if err != nil {
+		return err
+	}
+
+	n := 0
+	for _, e := range entries {
+		if e.ID != id {
+			entries[n] = e
+			n++
+		}
+	}
+	if n == len(entries) {
+		return nil // not found, no-op
+	}
+	return s.save(entries[:n])
 }
 
 func (s *Store) save(entries []Entry) error {
