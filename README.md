@@ -132,7 +132,7 @@ History is stored in `~/.icb_history` as JSON Lines. Up to 1000 entries are kept
 
 ### License
 
-MIT
+[Apache License 2.0](./LICENSE)
 
 ---
 
@@ -262,4 +262,4 @@ bind -n M-i run-shell 'PANE=#{pane_id}; NW=$(tmux new-window -c "#{pane_current_
 
 ### ライセンス
 
-MIT
+[Apache License 2.0](./LICENSE)
