@@ -9,12 +9,59 @@ import (
 	"github.com/yyYank/icb/store"
 )
 
-// icb addでテキストを入力するとスニペットとして保存され "saved as snippet" が出力される
-func TestRunAdd_SavesSnippet(t *testing.T) {
+// icb addでテキストを入力するとヒストリーに保存され "added to history" が出力される
+func TestRunAdd_AddsToHistory(t *testing.T) {
 	origInputFn := inputFn
 	defer func() { inputFn = origInputFn }()
 	inputFn = func() (string, error) {
-		return "test snippet", nil
+		return "test entry", nil
+	}
+
+	f, err := os.CreateTemp("", "icb_history_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	origHistoryStoreFn := historyStoreFn
+	defer func() { historyStoreFn = origHistoryStoreFn }()
+	historyStoreFn = func() (*store.Store, error) {
+		return store.NewWithPath(f.Name()), nil
+	}
+
+	buf := &bytes.Buffer{}
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"add"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "added to history") {
+		t.Errorf("want 'added to history', got: %q", buf.String())
+	}
+
+	// ヒストリーに実際に保存されたことを確認
+	s := store.NewWithPath(f.Name())
+	entries, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(entries))
+	}
+	if entries[0].Content != "test entry" {
+		t.Errorf("want content 'test entry', got %q", entries[0].Content)
+	}
+}
+
+// --snippetフラグでスニペットに保存され "saved as snippet" が出力される
+func TestRunAdd_SnippetFlag_SavesSnippet(t *testing.T) {
+	origInputFn := inputFn
+	defer func() { inputFn = origInputFn }()
+	inputFn = func() (string, error) {
+		return "my snippet", nil
 	}
 
 	f, err := os.CreateTemp("", "icb_snippets_test_*")
@@ -32,7 +79,7 @@ func TestRunAdd_SavesSnippet(t *testing.T) {
 
 	buf := &bytes.Buffer{}
 	rootCmd.SetOut(buf)
-	rootCmd.SetArgs([]string{"add"})
+	rootCmd.SetArgs([]string{"add", "--snippet"})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute failed: %v", err)
@@ -42,7 +89,7 @@ func TestRunAdd_SavesSnippet(t *testing.T) {
 		t.Errorf("want 'saved as snippet', got: %q", buf.String())
 	}
 
-	// スニペットが実際に保存されたことを確認
+	// スニペットに実際に保存されたことを確認
 	s := store.NewSnippetWithPath(f.Name())
 	entries, err := s.Load()
 	if err != nil {
@@ -51,8 +98,8 @@ func TestRunAdd_SavesSnippet(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("want 1 entry, got %d", len(entries))
 	}
-	if entries[0].Content != "test snippet" {
-		t.Errorf("want content 'test snippet', got %q", entries[0].Content)
+	if entries[0].Content != "my snippet" {
+		t.Errorf("want content 'my snippet', got %q", entries[0].Content)
 	}
 }
 
@@ -64,17 +111,17 @@ func TestRunAdd_EmptyInput(t *testing.T) {
 		return "", nil
 	}
 
-	f, err := os.CreateTemp("", "icb_snippets_test_*")
+	f, err := os.CreateTemp("", "icb_history_test_*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.Close()
 	defer os.Remove(f.Name())
 
-	origSnippetStoreFn := snippetStoreFn
-	defer func() { snippetStoreFn = origSnippetStoreFn }()
-	snippetStoreFn = func() (*store.Store, error) {
-		return store.NewSnippetWithPath(f.Name()), nil
+	origHistoryStoreFn := historyStoreFn
+	defer func() { historyStoreFn = origHistoryStoreFn }()
+	historyStoreFn = func() (*store.Store, error) {
+		return store.NewWithPath(f.Name()), nil
 	}
 
 	buf := &bytes.Buffer{}
@@ -86,7 +133,7 @@ func TestRunAdd_EmptyInput(t *testing.T) {
 	}
 
 	// 空入力時は何も保存されない
-	s := store.NewSnippetWithPath(f.Name())
+	s := store.NewWithPath(f.Name())
 	entries, err := s.Load()
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
