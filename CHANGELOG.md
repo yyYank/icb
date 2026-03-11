@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.0.2](https://github.com/yyYank/icb/compare/v0.0.1...v0.0.2) - 2026-03-11
+- feat: add clipboard copy shortcut to tui by @yyYank in https://github.com/yyYank/icb/pull/11
+
 ## [v0.0.1](https://github.com/yyYank/icb/commits/v0.0.1) - 2026-03-09
 - feat: initial implementation of icb by @yyYank in https://github.com/yyYank/icb/pull/1
 - feat: shell integration (Ctrl+X I) by @yyYank in https://github.com/yyYank/icb/pull/2
