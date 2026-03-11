@@ -87,13 +87,14 @@ icb > out.txt     # select and save to file
 ▶ ssh -i ~/.ssh/key user@host
   SELECT * FROM users WHERE id = 1
 ──────────────────────────────────────
-4/100  ↑↓ to move  Enter to select  Ctrl+C to cancel
+4/100  d:delete  s:snippet  p:preview  y:copy  Enter:select  Ctrl+C:cancel
 ```
 
 | Key | Action |
 |---|---|
 | `↑` / `↓` | Move cursor |
 | Type anything | Incremental search |
+| `y` | Copy selected entry to clipboard |
 | `Enter` | Select → stdout |
 | `Ctrl+C` / `Esc` | Cancel |
 | `Ctrl+X I` | Insert at cursor (requires shell integration) |
@@ -217,13 +218,14 @@ icb > out.txt     # 選択してファイルに保存
 ▶ ssh -i ~/.ssh/key user@host
   SELECT * FROM users WHERE id = 1
 ──────────────────────────────────────
-4/100  ↑↓で移動  Enterで選択  Ctrl+Cでキャンセル
+4/100  d:delete  s:snippet  p:preview  y:copy  Enter:select  Ctrl+C:cancel
 ```
 
 | キー | 動作 |
 |---|---|
 | `↑` / `↓` | カーソル移動 |
 | 文字入力 | インクリメンタルサーチ |
+| `y` | 選択中のエントリをクリップボードへコピー |
 | `Enter` | 選択 → 標準出力 |
 | `Ctrl+C` / `Esc` | キャンセル |
 | `Ctrl+X I` | カーソル位置に挿入（シェルインテグレーション必要） |

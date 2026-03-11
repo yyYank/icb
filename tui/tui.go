@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -37,6 +39,7 @@ type model struct {
 	width        int
 	height       int
 	previewMode  bool
+	clipboardOut io.Writer
 }
 
 func newModel(history, snippets []store.Entry, histStore, snippetStore *store.Store) model {
@@ -54,6 +57,7 @@ func newModel(history, snippets []store.Entry, histStore, snippetStore *store.St
 		filtered:     all,
 		historyStore: histStore,
 		snippetStore: snippetStore,
+		clipboardOut: io.Discard,
 	}
 }
 
@@ -118,6 +122,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "p":
 			if len(m.filtered) > 0 {
 				m.previewMode = true
+			}
+		case "y":
+			if len(m.filtered) > 0 {
+				if err := copyToClipboard(m.clipboardOut, m.filtered[m.cursor].Entry.Content); err != nil {
+					m.statusMsg = "error: " + err.Error()
+				} else {
+					m.statusMsg = "copied to clipboard"
+				}
 			}
 		case "s":
 			if len(m.filtered) > 0 {
@@ -216,7 +228,7 @@ func (m model) listView() string {
 	if m.statusMsg != "" {
 		fmt.Fprintf(&b, "%s\n", m.statusMsg)
 	} else {
-		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  p:preview  Enter:select  Ctrl+C:cancel\n",
+		fmt.Fprintf(&b, "%d/%d  d:delete  s:snippet  p:preview  y:copy  Enter:select  Ctrl+C:cancel\n",
 			len(m.filtered), len(m.all))
 	}
 
@@ -238,6 +250,7 @@ func Run(history, snippets []store.Entry, histStore, snippetStore *store.Store) 
 	defer tty.Close()
 
 	m := newModel(history, snippets, histStore, snippetStore)
+	m.clipboardOut = tty
 	p := tea.NewProgram(m, tea.WithInput(tty), tea.WithOutput(tty))
 
 	result, err := p.Run()
@@ -270,4 +283,14 @@ func removeItem(items []Item, id string) []Item {
 		}
 	}
 	return result
+}
+
+func copyToClipboard(w io.Writer, text string) error {
+	if w == nil {
+		return fmt.Errorf("clipboard output is not configured")
+	}
+
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+	_, err := fmt.Fprintf(w, "\x1b]52;c;%s\x07", encoded)
+	return err
 }
