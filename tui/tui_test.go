@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"bytes"
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -32,6 +34,28 @@ func TestModel_PKeyEntersPreviewMode(t *testing.T) {
 	m = result.(model)
 	if !m.previewMode {
 		t.Error("want previewMode=true after p")
+	}
+}
+
+// yキーでOSC 52経由のクリップボードコピーを行う
+func TestModel_YKeyCopiesSelectedContent(t *testing.T) {
+	entries := []store.Entry{
+		{ID: "1", Content: "line1\nline2\nline3"},
+	}
+	var out bytes.Buffer
+
+	m := newModel(entries, nil, nil, nil)
+	m.clipboardOut = &out
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	m = result.(model)
+
+	want := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(entries[0].Content)) + "\x07"
+	if out.String() != want {
+		t.Fatalf("want OSC52 sequence %q, got %q", want, out.String())
+	}
+	if m.statusMsg != "copied to clipboard" {
+		t.Fatalf("want copied status, got %q", m.statusMsg)
 	}
 }
 
@@ -81,5 +105,12 @@ func TestModel_CtrlCQuitsFromPreviewMode(t *testing.T) {
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if cmd == nil {
 		t.Error("want tea.Quit on ctrl+c in preview mode")
+	}
+}
+
+func TestCopyToClipboardWithoutWriter(t *testing.T) {
+	err := copyToClipboard(nil, "hello")
+	if err == nil {
+		t.Fatal("want error when writer is nil")
 	}
 }
